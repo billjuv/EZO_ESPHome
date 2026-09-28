@@ -1,6 +1,6 @@
 # EZO_ESPHome
 
-ESPHome firmware for an ESP32-based environmental sensor box using two Atlas Scientific EZO sensors on a shared I2C bus:
+ESPHome firmware for an ESP32-based environmental sensor box using two Atlas Scientific EZO sensors on a shared I2C bus. I'm using the two sensors shown, but see the "Using other EZO sensors" section below if you wish to use others.
 
 - **EZO-CO2** — carbon dioxide (ppm)
 - **EZO-HUM** — humidity, temperature, and dew point
