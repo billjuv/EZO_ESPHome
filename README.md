@@ -38,7 +38,7 @@ I2C wiring: **SDA = GPIO21**, **SCL = GPIO22**
 
 > **Note:** Atlas EZO circuits ship in UART mode. Each one must be switched to I2C mode before it will show up on the bus. See the Atlas Scientific datasheet for your sensor.
 
-Custom PCB files are in [`hardware/`](hardware/) and the 3D-printed enclosure is in [`enclosure/`](enclosure/).
+> **Coming Soon:** Custom PCB files will be located in [`hardware/`](hardware/) and the 3D-printed enclosure is in [`enclosure/`](enclosure/).
 
 ---
 
