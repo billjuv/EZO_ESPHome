@@ -1,0 +1,13 @@
+# Real credentials — never commit
+secrets.yaml
+
+# ESPHome build output
+.esphome/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# macOS clutter
+.DS_Store
+__MACOSX/

@@ -1,0 +1,132 @@
+# EZO_ESPHome
+
+ESPHome firmware for an ESP32-based environmental sensor box using two Atlas Scientific EZO sensors on a shared I2C bus:
+
+- **EZO-CO2** — carbon dioxide (ppm)
+- **EZO-HUM** — humidity, temperature, and dew point
+
+Readings are published over WiFi to an MQTT broker. Built for monitoring a mushroom grow operation, with data flowing into Node-RED, InfluxDB, and Grafana, but nothing here depends on that stack — any MQTT consumer works.
+
+Tested on **ESPHome 2026.1.4**.
+
+---
+
+## Why a custom component?
+
+ESPHome's built-in `ezo` platform handles single-value EZO sensors (CO2, pH, EC, etc.), but the EZO-HUM returns several values in one comma-separated string (for example `24.04,19.18,Dew,-1.76`). The `ezo_hum` component in `local_components/` reads that string and splits it into separate humidity, temperature, and dew point sensors.
+
+The EZO-CO2 is read with a raw I2C lambda in the YAML rather than the built-in `ezo` platform. This version waits a full 1000 ms after each read command (the EZO-CO2 needs about 900 ms to complete a measurement) and checks the sensor's status byte before parsing, logging a distinct message for each result:
+
+| Status byte | Meaning |
+|---|---|
+| 1 | Success |
+| 2 | Syntax error |
+| 254 | Still processing |
+| 255 | No data |
+
+---
+
+## Hardware
+
+| Part | Notes |
+|---|---|
+| ESP32 DevKit v1 (`esp32doit-devkit-v1`) | |
+| Atlas Scientific EZO-CO2 | I2C address `0x69` |
+| Atlas Scientific EZO-HUM | I2C address `0x6F` |
+
+I2C wiring: **SDA = GPIO21**, **SCL = GPIO22**
+
+> **Note:** Atlas EZO circuits ship in UART mode. Each one must be switched to I2C mode before it will show up on the bus. See the Atlas Scientific datasheet for your sensor.
+
+Custom PCB files are in [`hardware/`](hardware/) and the 3D-printed enclosure is in [`enclosure/`](enclosure/).
+
+---
+
+## Repository layout
+
+```
+EZO_ESPHome/
+├── ezo32-box.yaml           ESPHome config (one file for every box)
+├── secrets.yaml.example     Template for your credentials
+├── local_components/
+│   └── ezo_hum/             Custom EZO-HUM component
+├── hardware/                PCB schematic, Gerbers, BOM
+└── enclosure/               3D-print files
+```
+
+---
+
+## Setup
+
+1. Copy `ezo32-box.yaml` and the whole `local_components/` folder into your ESPHome config directory. The folder must sit next to the YAML.
+2. Copy `secrets.yaml.example` to `secrets.yaml` and fill in your own values. (If you already have a `secrets.yaml`, just add any missing keys.)
+3. Edit the three substitutions at the top of the YAML:
+   ```yaml
+   substitutions:
+     devicename: ezo32-box1
+     static_ip: 192.168.1.50
+     gateway: 192.168.1.1
+   ```
+4. Compile and flash:
+   ```bash
+   esphome run ezo32-box.yaml
+   ```
+   For each additional box, save a copy of the YAML with a new name (e.g. `ezo32-box2.yaml`) and change only the substitutions.
+
+---
+
+## MQTT topics
+
+All topics start with the device name. ESPHome builds sensor topics from each sensor's name, so confirm the exact names on your broker (for example with `mosquitto_sub -v -t '<devicename>/#'`).
+
+**Sensor readings** (every 30 s)
+
+```
+<devicename>/sensor/ezo-co2/state
+<devicename>/sensor/ezo_humidity/state
+<devicename>/sensor/ezo_temperature/state
+<devicename>/sensor/ezo_dew_point/state
+```
+
+**Diagnostics**
+
+| Topic | Content |
+|---|---|
+| `<devicename>/logs/boot` | Published once at boot |
+| `<devicename>/logs/boot_heap` | Free heap at boot |
+| `<devicename>/logs/boot_reset` | Reason for the last reset (power on, brownout, watchdog, etc.) |
+| `<devicename>/logs/heap` | Free heap, every 10 minutes |
+| `<devicename>/logs/watchdog` | Published just before a restart if MQTT has been disconnected |
+
+---
+
+## Command channel
+
+You can send any EZO command to either sensor over MQTT without reflashing. The sensor's reply is published to the matching `resp` topic.
+
+| Sensor | Send command to | Reply appears on |
+|---|---|---|
+| EZO-CO2 | `<devicename>/sensor/ezo-co2/cmd` | `<devicename>/sensor/ezo-co2/resp` |
+| EZO-HUM | `<devicename>/sensor/ezo-hum/cmd` | `<devicename>/sensor/ezo-hum/resp` |
+
+Example — ask the CO2 sensor for its device info:
+
+```bash
+# Terminal 1: watch for the reply
+mosquitto_sub -h <broker-ip> -u <user> -P <password> -t 'ezo32-box1/sensor/ezo-co2/resp'
+
+# Terminal 2: send the command
+mosquitto_pub -h <broker-ip> -u <user> -P <password> -t 'ezo32-box1/sensor/ezo-co2/cmd' -m 'i'
+```
+
+`i` (device info) and `Status` work on both sensors. See the Atlas Scientific datasheets for the full command list, including calibration.
+
+---
+
+## Configuration notes
+
+- **`api: reboot_timeout: 0s`** — without Home Assistant connected, ESPHome reboots the board every 15 minutes unless this is set.
+- **`power_save_mode: none`** — keeps OTA updates and the API reliable.
+- **Watchdog** — every 10 minutes the board checks its MQTT connection and restarts if disconnected. Useful for remote installs where nobody is on-site to power-cycle it.
+- **Fallback hotspot** — if the board can't join WiFi, it starts its own access point named `<devicename> Fallback Hotspot`.
+- **`local_components/`** — ESPHome deprecated the old `custom_components/` folder name, so this repo uses `local_components/`.

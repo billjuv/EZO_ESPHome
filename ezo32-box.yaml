@@ -1,0 +1,323 @@
+# EZO-CO2 + EZO-HUM sensor box — ESPHome
+# Tested on ESPHome 2026.1.4 (ESP32 DevKit v1, Arduino framework)
+#
+# To set up a new box, change only the three substitutions below.
+
+substitutions:
+  devicename: ezo32-box1
+  static_ip: 192.168.1.50
+  gateway: 192.168.1.1
+
+esphome:
+  name: ${devicename}
+  # ESPHome-safe boot hook
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: publish_boot
+
+esp32:
+  board: esp32doit-devkit-v1
+  framework:
+    type: arduino
+
+# Load the custom ezo_hum component (folder sits next to this YAML)
+external_components:
+  - source:
+      type: local
+      path: local_components
+    components: [ ezo_hum ]
+
+logger:
+  level: DEBUG
+
+api:
+  reboot_timeout: 0s
+  # Without Home Assistant connected, the ESP reboots every 15 minutes unless
+  # reboot_timeout is 0s. Removing api: entirely breaks OTA without a static IP.
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  manual_ip:
+    static_ip: ${static_ip}
+    gateway: ${gateway}
+    subnet: 255.255.255.0
+    dns1: ${gateway}
+  ap:
+    ssid: "${devicename} Fallback Hotspot"
+    password: !secret ap_password
+
+web_server:
+  port: 80
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+captive_portal:
+
+mqtt:
+  id: mqtt_client
+  broker: !secret mqtt_host
+  username: !secret mqtt_user
+  password: !secret mqtt_password
+  client_id: ${devicename}
+
+  # -------- COMMAND CHANNEL (Status / Cal / etc) --------
+  on_message:
+    - topic: ${devicename}/sensor/ezo-co2/cmd
+      then:
+        - lambda: |-
+            const uint8_t addr = 0x69;
+            uint8_t rx[32] = {0};
+
+            std::string cmd = x;
+            ESP_LOGI("EZO_CO2", "MQTT command received: %s", cmd.c_str());
+
+            auto err = id(co2_i2c).write(addr, (uint8_t*)cmd.c_str(), cmd.length() + 1);
+            if (err != esphome::i2c::ERROR_OK) {
+              ESP_LOGE("EZO_CO2", "I2C write failed (%d)", err);
+              return;
+            }
+
+            // Use 1000ms — commands like Cal/Status also need full processing time
+            delay(1000);
+
+            err = id(co2_i2c).read(addr, rx, sizeof(rx));
+            if (err != esphome::i2c::ERROR_OK) {
+              ESP_LOGE("EZO_CO2", "I2C read failed (%d)", err);
+              return;
+            }
+
+            // Check status byte
+            uint8_t status = rx[0];
+            if (status == 254) {
+              ESP_LOGW("EZO_CO2", "Sensor still processing (254) after command");
+            } else if (status == 255) {
+              ESP_LOGW("EZO_CO2", "No data (255) after command");
+            } else if (status == 2) {
+              ESP_LOGE("EZO_CO2", "Syntax error (2) — check command string");
+            }
+
+            std::string resp;
+            for (int i = 1; i < (int)sizeof(rx) && rx[i] != 0x00; i++) {
+              resp += (char)rx[i];
+            }
+
+            ESP_LOGI("EZO_CO2", "Command response: status=%d data='%s'", status, resp.c_str());
+            id(mqtt_client).publish("${devicename}/sensor/ezo-co2/resp", resp);
+
+    - topic: ${devicename}/sensor/ezo-hum/cmd
+      then:
+        - lambda: |-
+            const uint8_t addr = 0x6F;
+            uint8_t rx[32] = {0};
+
+            std::string cmd = x;
+            ESP_LOGI("EZO_HUM", "MQTT command received: %s", cmd.c_str());
+
+            auto err = id(co2_i2c).write(addr, (uint8_t*)cmd.c_str(), cmd.length() + 1);
+            if (err != esphome::i2c::ERROR_OK) {
+              ESP_LOGE("EZO_HUM", "I2C write failed (%d)", err);
+              return;
+            }
+
+            // 1000ms for HUM commands too
+            delay(1000);
+
+            err = id(co2_i2c).read(addr, rx, sizeof(rx));
+            if (err != esphome::i2c::ERROR_OK) {
+              ESP_LOGE("EZO_HUM", "I2C read failed (%d)", err);
+              return;
+            }
+
+            // Check status byte
+            uint8_t status = rx[0];
+            if (status == 254) {
+              ESP_LOGW("EZO_HUM", "Sensor still processing (254) after command");
+            } else if (status == 255) {
+              ESP_LOGW("EZO_HUM", "No data (255) after command");
+            } else if (status == 2) {
+              ESP_LOGE("EZO_HUM", "Syntax error (2) — check command string");
+            }
+
+            std::string resp;
+            for (int i = 1; i < (int)sizeof(rx) && rx[i] != 0x00; i++) {
+              resp += (char)rx[i];
+            }
+
+            ESP_LOGI("EZO_HUM", "Command response: status=%d data='%s'", status, resp.c_str());
+            id(mqtt_client).publish("${devicename}/sensor/ezo-hum/resp", resp);
+
+i2c:
+  id: co2_i2c
+  sda: 21
+  scl: 22
+  scan: true
+
+globals:
+  - id: last_co2_value
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  - id: last_reset_reason
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+sensor:
+  # ---------------- HUM SENSOR ----------------
+  - platform: ezo_hum
+    address: 0x6F
+    update_interval: 30s
+    humidity:
+      name: "EZO Humidity"
+      unit_of_measurement: "%"
+      accuracy_decimals: 2
+    temperature:
+      name: "EZO Temperature"
+      unit_of_measurement: "°C"
+      accuracy_decimals: 2
+    dew_point:
+      name: "EZO Dew Point"
+      unit_of_measurement: "°C"
+      accuracy_decimals: 2
+
+  # ---------------- CO2 SENSOR (PUBLISH ONLY) ----------------
+  - platform: template
+    name: "EZO-CO2"
+    id: co2_ezo
+    device_class: carbon_dioxide
+    state_class: measurement
+    unit_of_measurement: ppm
+    update_interval: never
+    lambda: |-
+      return id(last_co2_value);
+
+  # ---------------- WIFI RSSI ----------------
+  - platform: wifi_signal
+    name: "${devicename} WiFi Signal"
+    update_interval: 60s
+
+  # ---------------- UPTIME ----------------
+  - platform: uptime
+    name: "${devicename} Uptime Seconds"
+    id: uptime_seconds
+    update_interval: 60s
+
+interval:
+  # -------- CO2 MEASUREMENT LOOP --------
+  - interval: 30s
+    then:
+      - lambda: |-
+          const uint8_t addr = 0x69;
+          uint8_t rx[32] = {0};
+
+          ESP_LOGD("EZO_CO2", "Sending R command");
+
+          // Send "R" command (R + null terminator)
+          auto err = id(co2_i2c).write(addr, (uint8_t*)"R", 2);
+          if (err != esphome::i2c::ERROR_OK) {
+            ESP_LOGE("EZO_CO2", "I2C write failed (%d)", err);
+            return;
+          }
+
+          // EZO-CO2 requires 900ms to process — 1000ms gives a safe margin
+          delay(1000);
+
+          err = id(co2_i2c).read(addr, rx, sizeof(rx));
+          if (err != esphome::i2c::ERROR_OK) {
+            ESP_LOGE("EZO_CO2", "I2C read failed (%d)", err);
+            return;
+          }
+
+          // Check status byte (rx[0]) before attempting to parse
+          // 1 = success, 2 = syntax error, 254 = still processing, 255 = no data
+          uint8_t status = rx[0];
+          if (status == 254) {
+            ESP_LOGW("EZO_CO2", "Sensor still processing (254) — delay may need to be longer");
+            return;
+          }
+          if (status == 255) {
+            ESP_LOGW("EZO_CO2", "No data available (255)");
+            return;
+          }
+          if (status == 2) {
+            ESP_LOGE("EZO_CO2", "Syntax error from sensor (2)");
+            return;
+          }
+          if (status != 1) {
+            ESP_LOGW("EZO_CO2", "Unexpected status byte: %d", status);
+            return;
+          }
+
+          // Parse data bytes (rx[1] onward, null-terminated)
+          std::string value_str;
+          for (int i = 1; i < (int)sizeof(rx) && rx[i] != 0x00; i++) {
+            value_str += (char)rx[i];
+          }
+
+          ESP_LOGD("EZO_CO2", "Raw response: status=%d data='%s'", status, value_str.c_str());
+
+          float co2_val = atof(value_str.c_str());
+          if (isnan(co2_val) || co2_val <= 0) {
+            ESP_LOGW("EZO_CO2", "Invalid CO2 reading: '%s'", value_str.c_str());
+            return;
+          }
+
+          // Log and publish on every read so MQTT topic stays fresh
+          if (fabs(co2_val - id(last_co2_value)) > 0.1) {
+            id(last_co2_value) = co2_val;
+            ESP_LOGI("EZO_CO2", "New CO2: %.2f ppm", co2_val);
+          } else {
+            ESP_LOGD("EZO_CO2", "CO2 unchanged: %.2f ppm", co2_val);
+          }
+          id(co2_ezo).publish_state(co2_val);
+
+  # -------- WATCHDOG --------
+  - interval: 10min
+    startup_delay: 120s
+    then:
+      - lambda: |-
+          if (!id(mqtt_client).is_connected()) {
+            ESP_LOGW("watchdog","MQTT disconnected — restarting");
+            id(mqtt_client).publish("${devicename}/logs/watchdog","MQTT disconnected — restarting");
+            ESP.restart();
+          }
+
+      - lambda: |-
+          char buf[64];
+          snprintf(buf,sizeof(buf),"Free heap: %u",ESP.getFreeHeap());
+          id(mqtt_client).publish("${devicename}/logs/heap", buf);
+
+script:
+  - id: publish_boot
+    then:
+      - lambda: |-
+          id(mqtt_client).publish("${devicename}/logs/boot", "ESP32 booted");
+
+          char buf[64];
+          snprintf(buf, sizeof(buf), "Free heap: %u", ESP.getFreeHeap());
+          id(mqtt_client).publish("${devicename}/logs/boot_heap", buf);
+
+          int reason = esp_reset_reason();
+          const char* reason_str;
+
+          switch (reason) {
+            case ESP_RST_POWERON:   reason_str = "Power on reset"; break;
+            case ESP_RST_EXT:       reason_str = "External pin reset"; break;
+            case ESP_RST_SW:        reason_str = "Software reset"; break;
+            case ESP_RST_PANIC:     reason_str = "Panic reset"; break;
+            case ESP_RST_INT_WDT:   reason_str = "Interrupt WDT reset"; break;
+            case ESP_RST_TASK_WDT:  reason_str = "Task WDT reset"; break;
+            case ESP_RST_WDT:       reason_str = "Other WDT reset"; break;
+            case ESP_RST_DEEPSLEEP: reason_str = "Wake from deep sleep"; break;
+            case ESP_RST_BROWNOUT:  reason_str = "Brownout reset"; break;
+            case ESP_RST_SDIO:      reason_str = "SDIO reset"; break;
+            default:                reason_str = "Unknown reset"; break;
+          }
+
+          id(mqtt_client).publish("${devicename}/logs/boot_reset", reason_str);
