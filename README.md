@@ -123,6 +123,67 @@ mosquitto_pub -h <broker-ip> -u <user> -P <password> -t 'ezo32-box1/sensor/ezo-c
 
 ---
 
+## Using other EZO sensors
+
+This project can be adapted to other Atlas Scientific EZO circuits (pH, EC, DO, ORP, RTD, and others). All EZO circuits speak the same basic I2C protocol: send a command, wait for the sensor to process it, then read back a status byte followed by the reply text.
+
+### Default I2C addresses
+
+Each sensor on the bus needs its own address. Common defaults:
+
+| Circuit | Default address |
+|---|---|
+| EZO-DO (dissolved oxygen) | `0x61` |
+| EZO-ORP | `0x62` |
+| EZO-pH | `0x63` |
+| EZO-EC (conductivity) | `0x64` |
+| EZO-RTD (temperature) | `0x66` |
+| EZO-CO2 | `0x69` |
+| EZO-HUM | `0x6F` |
+
+Confirm against the datasheet for your circuit. If two circuits share an address, one can be changed with the `I2C,n` command (the circuit reboots at the new address). Setting `scan: true` under `i2c:` lists every address found in the boot log.
+
+### Option 1 — ESPHome's built-in `ezo` platform (simplest)
+
+For circuits that return a single value, ESPHome's built-in platform needs no custom code:
+
+```yaml
+sensor:
+  - platform: ezo
+    id: ph_ezo
+    name: "EZO pH"
+    address: 0x63
+    unit_of_measurement: "pH"
+    update_interval: 30s
+```
+
+This has not been tested alongside the `ezo_hum` component in this project.
+
+### Option 2 — Copy the CO2 raw I2C pattern
+
+The CO2 section of `ezo32-box.yaml` works as a template for any single-value circuit. Copy both the template sensor and its `interval:` block, then change:
+
+1. The address (`const uint8_t addr = 0x69;`)
+2. The delay after the `R` command — check the datasheet for the circuit's read time (1000 ms covers most)
+3. The sensor `name`, `id`, and `unit_of_measurement`
+4. The global variable that stores the last value (add a new one for each sensor)
+
+Each read blocks the board for the length of its delay, so with several sensors on one bus, keep the total delay per cycle reasonable.
+
+### Command channel
+
+To send commands to a new circuit over MQTT, copy one of the `on_message` blocks under `mqtt:` and change its topic name and address. Commands such as `i`, `Status`, and calibration then work the same way as for the CO2 and HUM sensors.
+
+### Circuits that return more than one value
+
+Some circuits can report several values in one comma-separated reply, like the EZO-HUM does. For example, the EZO-EC can report conductivity, TDS, salinity, and specific gravity together. You have two choices:
+
+- **Turn off the extra outputs** with the circuit's `O` (output) command so it returns one value. Then either option above works.
+- **Parse the full reply** by adapting the `ezo_hum` component in `local_components/`. It already splits a comma-separated reply into separate sensors.
+
+### Temperature compensation
+
+pH, EC, and DO readings are temperature-dependent. These circuits accept a temperature value (the `T` command) to compensate. See the datasheet for your circuit.
 ## Configuration notes
 
 - **`api: reboot_timeout: 0s`** — without Home Assistant connected, ESPHome reboots the board every 15 minutes unless this is set.
