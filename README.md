@@ -49,12 +49,11 @@ I2C wiring: **SDA = GPIO21**, **SCL = GPIO22**
 A simple carrier board for the ESP32 DevKit v1 with a shared I2C bus for EZO sensors or other I2C modules.
 
 - **Power:** 5 V in through the screw terminal, feeding the DevKit's VIN pin
+- **Sensor power:** 3.3 V from the DevKit's 3V3 pin (the header pin is labeled **VIN** on the silkscreen, but it carries 3.3 V)
 - **Pull-ups:** 4.7 kΩ on SDA and SCL to 3.3 V
 - **Sensor headers:** four headers, all wired in parallel to the same bus
-  - Two **4-pin** headers: SDA, SCL, GND, power (matches common 4-pin I2C modules)
-  - Two **5-pin** headers: SCL, SDA, GND, power, N/A
-- **Size:** 49.7 × 56 mm, mounting holes on 43.5 × 50 mm centers
-
+  - Two **4-pin** headers: SDA, SCL, GND, 3.3 V (matches common 4-pin I2C modules)
+  - Two **5-pin** headers: SCL, SDA, GND, 3.3 V, N/A
 > The 4-pin and 5-pin headers have SDA and SCL in **opposite order**. Check the silkscreen before connecting a sensor.
 
 | Schematic | PCB top | PCB bottom |
@@ -69,6 +68,7 @@ A 3D-printed box and lid sized for the carrier PCB. STL files are in [`enclosure
 
 - `EZO_ESP32DevKit-Box.stl`
 - `EZO_ESP32DevKit-Lid.stl`
+  Printed in **PETG**. The PCB and the lid both mount with **M2.5 screws**.
 
 | Left | Right |
 |---|---|
