@@ -28,18 +28,51 @@ The EZO-CO2 is read with a raw I2C lambda in the YAML rather than the built-in `
 
 ## Hardware
 
-| Part | Notes |
-|---|---|
-| ESP32 DevKit v1 (`esp32doit-devkit-v1`) | |
-| Atlas Scientific EZO-CO2 | I2C address `0x69` |
-| Atlas Scientific EZO-HUM | I2C address `0x6F` |
+### Parts
+
+| Part | Qty | Notes |
+|---|---|---|
+| ESP32 DevKit v1, 30-pin (`esp32doit-devkit-v1`) | 1 | Plugs into the carrier PCB |
+| Atlas Scientific EZO-CO2 | 1 | I2C address `0x69` |
+| Atlas Scientific EZO-HUM | 1 | I2C address `0x6F` |
+| 4.7 kΩ resistor, through-hole | 2 | I2C pull-ups (R1, R2) |
+| 2-position screw terminal | 1 | 5 V power input |
+| Carrier PCB | 1 | See below |
+| 3D-printed box and lid | 1 | See below |
 
 I2C wiring: **SDA = GPIO21**, **SCL = GPIO22**
 
 > **Note:** Atlas EZO circuits ship in UART mode. Each one must be switched to I2C mode before it will show up on the bus. See the Atlas Scientific datasheet for your sensor.
 
-> **Coming Soon:** Custom PCB files will be located in [`hardware/`](hardware/) and the 3D-printed enclosure is in [`enclosure/`](enclosure/).
+### Carrier PCB
 
+A simple carrier board for the ESP32 DevKit v1 with a shared I2C bus for EZO sensors or other I2C modules.
+
+- **Power:** 5 V in through the screw terminal, feeding the DevKit's VIN pin
+- **Pull-ups:** 4.7 kΩ on SDA and SCL to 3.3 V
+- **Sensor headers:** four headers, all wired in parallel to the same bus
+  - Two **4-pin** headers: SDA, SCL, GND, power (matches common 4-pin I2C modules)
+  - Two **5-pin** headers: SCL, SDA, GND, power, N/A
+- **Size:** 49.7 × 56 mm, mounting holes on 43.5 × 50 mm centers
+
+> The 4-pin and 5-pin headers have SDA and SCL in **opposite order**. Check the silkscreen before connecting a sensor.
+
+| Schematic | PCB top | PCB bottom |
+|---|---|---|
+| ![Schematic](Images/Schematic.png) | ![PCB top](Images/PCB_Top.png) | ![PCB bottom](Images/PCB_Bottom.png) |
+
+**Ordering:** the Gerber and drill files in [`hardware/`](hardware/) were exported from EasyEDA. Zip them together and upload the zip to a PCB fabricator (JLCPCB, PCBWay, etc.). See [`hardware/How-to-order-PCB.txt`](hardware/How-to-order-PCB.txt).
+
+### Enclosure
+
+A 3D-printed box and lid sized for the carrier PCB. STL files are in [`enclosure/`](enclosure/):
+
+- `EZO_ESP32DevKit-Box.stl`
+- `EZO_ESP32DevKit-Lid.stl`
+
+| Left | Right |
+|---|---|
+| ![Enclosure left](Images/3D_BoxL.png) | ![Enclosure right](Images/3D_BoxR.png) |
 ---
 
 ## Repository layout
