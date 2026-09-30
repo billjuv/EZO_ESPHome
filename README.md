@@ -224,3 +224,4 @@ pH, EC, and DO readings are temperature-dependent. These circuits accept a tempe
 - **Watchdog** — every 10 minutes the board checks its MQTT connection and restarts if disconnected. Useful for remote installs where nobody is on-site to power-cycle it.
 - **Fallback hotspot** — if the board can't join WiFi, it starts its own access point named `<devicename> Fallback Hotspot`.
 - **`local_components/`** — ESPHome deprecated the old `custom_components/` folder name, so this repo uses `local_components/`.
+- **"Component took a long time" warning** — each EZO read waits about 1 second for the sensor, which triggers this ESPHome warning in the log. It's expected and harmless.
