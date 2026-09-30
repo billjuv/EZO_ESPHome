@@ -70,7 +70,8 @@ A 3D-printed box and lid sized for the carrier PCB. STL files are in [`enclosure
 - `EZO_ESP32DevKit-Box.stl`
 - `EZO_ESP32DevKit-Lid.stl`
 * Printed in **PETG**. The PCB and the lid both mount with **M2.5 screws**.
-* The notch in the box, and corresponding area of lid, hold the cables of two sensors snugly - plug second notch if only using one sensor. Though not as waterproof as it should be for the high humidity of the mushroom fruiting room, examining the boards after one year in use, I found no visible damage to the circuit boards inside. Power is supplied through a 5.5 x 2.1mm power jack from externally provided 5VDC power.
+* The notch in the box, and corresponding area of lid, hold the cables of two sensors snugly - plug second notch if only using one sensor. Though not as waterproof as it should be for the high humidity of the mushroom fruiting room, examining the boards after one year in use, I found no visible damage to the circuit boards inside.
+* Power is supplied through a 5.5 x 2.1mm power jack from externally provided 5VDC power.
 
 | Left | Right |
 |---|---|
