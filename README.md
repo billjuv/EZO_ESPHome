@@ -1,4 +1,5 @@
 # EZO_ESPHome
+> 🍄 One of several related projects. See the full list at **[billjuv.github.io](https://billjuv.github.io)**.
 
 ESPHome firmware for an ESP32-based environmental sensor box using two Atlas Scientific EZO sensors on a shared I2C bus. I'm using the two sensors shown, but see the "Using other EZO sensors" section below if you wish to use others.
 
